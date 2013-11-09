@@ -97,7 +97,7 @@ int main(int argc, char **argv) {
 
   size_t numPixels = numRows()*numCols();
   //copy the output back to the host
-  checkCudaErrors(cudaMemcpy(h_outputImageRGBA, d_outputImageRGBA__, sizeof(uchar4) * numPixels, cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(h_outputImageRGBA, d_outputImageRGBA, sizeof(uchar4) * numPixels, cudaMemcpyDeviceToHost));
 
   postProcess(output_file, h_outputImageRGBA);
 
