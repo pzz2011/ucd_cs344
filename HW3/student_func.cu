@@ -81,6 +81,35 @@
 
 #include "utils.h"
 
+__global__ void findMinMax(const float* const d_logLuminance,float* d_min,float* d_max,int num){
+  float mi,mx;
+  mi = mx = d_logLuminance[0];
+  for(size_t i = 1; i < num; ++i){
+    mi = min(d_logLuminance[i],mi);
+    mx = max(d_logLuminance[i],mx);
+  }
+  *d_min = mi; *d_max = mx;
+}
+
+__global__ void calcHisto(const float* const d_logLuminance, unsigned int* const d_histo, 
+               float d_min,float d_range,int binNum, int num){
+
+  for (size_t i = 0; i < num; ++i) {
+    unsigned int bin = ((d_logLuminance[i] - d_min) / d_range * binNum);
+
+    d_histo[bin]++;
+  }
+}
+
+__global__ void findRange(float* d_min, float* d_max, float* d_range){
+}
+
+__global__ void calcCDF(unsigned int* const d_histo, unsigned int* const d_cdf, int numBins){
+  d_cdf[0] = 0;
+  for(int i = 1 ; i < numBins ; i++){
+    d_cdf[i] = d_histo[i-1] + d_cdf[i - 1];
+  }
+}
 void your_histogram_and_prefixsum(const float* const d_logLuminance,
                                   unsigned int* const d_cdf,
                                   float &min_logLum,
@@ -99,6 +128,30 @@ void your_histogram_and_prefixsum(const float* const d_logLuminance,
     4) Perform an exclusive scan (prefix sum) on the histogram to get
        the cumulative distribution of luminance values (this should go in the
        incoming d_cdf pointer which already has been allocated for you)       */
+  float *d_min, *d_max, *d_range, h_range;
+  checkCudaErrors(cudaMalloc(&d_min,sizeof(float)));
+  checkCudaErrors(cudaMalloc(&d_max,sizeof(float)));
+  int totalCnt = numRows * numCols;
 
+  findMinMax<<<1,1>>>(d_logLuminance,d_min,d_max,totalCnt);
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
 
+  checkCudaErrors(cudaMemcpy(&max_logLum,d_max,sizeof(float),cudaMemcpyDeviceToHost));
+  checkCudaErrors(cudaMemcpy(&min_logLum,d_min,sizeof(float),cudaMemcpyDeviceToHost));
+
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+
+  // Step 2
+  h_range = max_logLum - min_logLum;
+
+  // Step 3
+  unsigned int *d_histo;
+  checkCudaErrors(cudaMalloc(&d_histo,sizeof(unsigned int) * numBins));
+  checkCudaErrors(cudaMemset(d_histo,0, sizeof(unsigned int) * numBins));
+
+  calcHisto<<<1,1>>>(d_logLuminance, d_histo, min_logLum, h_range, numBins, totalCnt);
+  cudaDeviceSynchronize(); checkCudaErrors(cudaGetLastError());
+
+  // Step 4
+  calcCDF<<<1,1>>>(d_histo,d_cdf,numBins);
 }
